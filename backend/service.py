@@ -1,6 +1,7 @@
 """TrueShape v2 service layer: loads data, runs the engine per peer group, shapes API responses."""
 from __future__ import annotations
 import io
+import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -62,27 +63,35 @@ def _date(d):
 
 
 class Store:
-    def __init__(self, log=print):
-        if not (DATA / "transactions.csv").exists():
-            log("First run: generating the simulated payments (about 30 seconds)...")
-            S.generate_dataset(DATA)
-        log("Loading payments...")
-        self.cal = pd.read_csv(DATA / "calendar.csv", parse_dates=["date"])
+    def __init__(self, log=print, tables=None, link=True):
+        """tables=(merchants, transactions, cashouts, calendar) scores an in-memory replicate instead of data/."""
+        if tables is None:
+            if not (DATA / "transactions.csv").exists():
+                log("First run: generating the simulated payments (about 30 seconds)...")
+                S.generate_dataset(DATA)
+            log("Loading payments...")
+            self.cal = pd.read_csv(DATA / "calendar.csv", parse_dates=["date"])
+            m = pd.read_csv(DATA / "merchants.csv", dtype=str).fillna("")
+            tx = pd.read_csv(DATA / "transactions.csv", usecols=["merchant_id", "timestamp", "amount_inr", "payer_id",
+                                                                "payer_state", "payment_mode"])
+            tx["timestamp"] = pd.to_datetime(tx["timestamp"])
+            cash = pd.read_csv(DATA / "cashouts.csv")
+        else:
+            md, tx, cash, cal = tables
+            self.cal = cal.copy()
+            self.cal["date"] = pd.to_datetime(self.cal["date"])
+            m = md.astype(str).replace({"None": "", "nan": ""})
+            tx = tx[["merchant_id", "timestamp", "amount_inr", "payer_id", "payer_state", "payment_mode"]]
         self.cal["festival"] = self.cal["festival"].fillna("")
-        m = pd.read_csv(DATA / "merchants.csv", dtype=str).fillna("")
         m["cat_key"] = m["category"].map(CAT_KEY)
         self.merchants = m
         self.mrow = m.set_index("merchant_id")
-        tx = pd.read_csv(DATA / "transactions.csv", usecols=["merchant_id", "timestamp", "amount_inr", "payer_id",
-                                                            "payer_state", "payment_mode"])
-        tx["timestamp"] = pd.to_datetime(tx["timestamp"])
-        cash = pd.read_csv(DATA / "cashouts.csv")
         self.dates = pd.DatetimeIndex(self.cal["date"])
         self.D = len(self.dates)
         self.today = self.D - 1
         self.tx = {mid: g.reset_index(drop=True) for mid, g in tx.groupby("merchant_id")}
         cash_by = {mid: g for mid, g in cash.groupby("merchant_id")}
-        log("Scoring 168 shops...")
+        log(f"Scoring {len(m)} shops...")
         self.sig = {}
         for r in m.itertuples():
             ck = r.cat_key
@@ -92,15 +101,64 @@ class Store:
         for (ck, city), g in m.groupby(["cat_key", "city"]):
             self.groups[(ck, city)] = E.peer_reference([self.sig[x] for x in g.merchant_id])
         self.res = {}
+        self.links = {}
+        self.score_all(m)
+        self.ev_nolink = E.evaluate(self.res, m, self.dates[0]) if link else None
+        if link:                                     # link test: nightly passes until the held set is stable
+            homes = dict(zip(m.merchant_id, m.state))
+            for _ in range(3):
+                held = self.held_from()
+                L = E.link_signal(self.tx, homes, held, self.D, self.dates[0])
+                for mid, (share, count, partners) in L.items():
+                    sg = self.sig[mid]
+                    sg["x"]["ring_link"] = np.where(count >= E.LINK_MIN, share, 0.0)
+                    sg.update(link_on=True, link_count=count, link_share=share)
+                    self.links[mid] = dict(share=share, count=count, partners=partners)
+                self.score_all(m)
+                if self.held_from() == held:
+                    break
+        self.ev = E.evaluate(self.res, m, self.dates[0])
+        self.summary = E.summarise(self.ev)
+        log("Ready.")
+
+    def score_all(self, m):
         for r in m.itertuples():
             s = self.sig[r.merchant_id]
             dr = E.drifts(s, self.groups[(r.cat_key, r.city)])
             s["drift"] = dr
             self.res[r.merchant_id] = dict(drift=dr, ladder=E.run_ladder(dr, r.merchant_id, r.answer_key),
                                            vrule=E.volume_rule(s))
-        self.ev = E.evaluate(self.res, m, self.dates[0])
-        self.summary = E.summarise(self.ev)
-        log("Ready.")
+
+    def run_variant(self, peer=True, link=True, **fixes):
+        """Re-score every shop with one part switched off (ablation study). Leaves the live results untouched."""
+        m, D = self.merchants, self.D
+        sig = {k: dict(v, x=dict(v["x"], ring_link=np.zeros(D))) for k, v in self.sig.items()}
+
+        def score():
+            out = {}
+            for r in m.itertuples():
+                dr = E.drifts(sig[r.merchant_id], self.groups[(r.cat_key, r.city)] if peer else None)
+                out[r.merchant_id] = dict(drift=dr, ladder=E.run_ladder(dr, r.merchant_id, r.answer_key, fixes=fixes),
+                                          vrule=E.volume_rule(sig[r.merchant_id]))
+            return out
+
+        held_of = lambda res: {k: int(np.argmax(v["ladder"]["level"] >= 4)) for k, v in res.items()
+                               if (v["ladder"]["level"] >= 4).any()}
+        res = score()
+        if link:
+            homes = dict(zip(m.merchant_id, m.state))
+            for _ in range(3):
+                held = held_of(res)
+                for k, (share, count, _) in E.link_signal(self.tx, homes, held, D, self.dates[0]).items():
+                    sig[k]["x"]["ring_link"] = np.where(count >= E.LINK_MIN, share, 0.0)
+                res = score()
+                if held_of(res) == held:
+                    break
+        return E.evaluate(res, m, self.dates[0])
+
+    def held_from(self):
+        return {mid: int(np.argmax(r["ladder"]["level"] >= 4)) for mid, r in self.res.items()
+                if (r["ladder"]["level"] >= 4).any()}
 
     # ------------------------------------------------------------ helpers
     def iso(self, d):
@@ -159,7 +217,7 @@ class Store:
             flags = [E.TRAIT_LABEL[E.TRAITS[i]] for i in np.argsort(-t) if t[i] >= E.DRIFT_ON and E.TRAITS[i] != "volume"][:2]
             e = self.ev.set_index("mid").loc[r.merchant_id]
             rows.append(dict(id=r.merchant_id, name=r.name, category=r.cat_key, city=r.city, area=r.area,
-                             level=int(lad["level"][d]), score=int(round(lad["score"][d])), flags=flags,
+                             level=int(lad["level"][d]), score=int(round(lad["score"][fd])), flags=flags,
                              vol_ratio=round(float(self.sig[r.merchant_id]["vratio"][d]), 2),
                              glyph=self.glyph(r.merchant_id, fd), story=r.merchant_id in self.story_ids(),
                              kind=r.answer_key, kind_label=S.KINDS[r.answer_key], fraud=bool(e.fraud),
@@ -248,7 +306,8 @@ class Store:
         return dict(
             **{k: v for k, v in info.items() if not k.startswith("declared_")},
             category=ck, category_label=S.CATEGORIES[ck]["label"], noun=noun, mcc=S.CATEGORIES[ck]["mcc"],
-            home=sig["home"], today=self.iso(last), level=int(lad["level"][last]), score=int(round(lad["score"][last])),
+            home=sig["home"], today=self.iso(last), level=int(lad["level"][last]), score=int(round(lad["score"][d])),
+            score_today=int(round(lad["score"][last])),
             focus_day=self.iso(d), focus_note=focus_note, drifting=int(lad["nd"][d]),
             score_series=[int(round(v)) for v in lad["score"]], level_series=[int(v) for v in lad["level"]],
             vol_series=[round(float(v), 2) for v in sig["vratio"]],
@@ -272,8 +331,15 @@ class Store:
                     declared_bill=int(r["declared_avg_bill_inr"]), declared_monthly=int(r["declared_monthly_sales_inr"]),
                     answer=dict(kind=r["answer_key"], label=S.KINDS[r["answer_key"]], note=r["story_note"],
                                 change_date=r["change_start_date"]))
-        return self.build(self.sig[mid], res["drift"], res["ladder"], res["vrule"], self.today, info,
-                          self.groups[(r["cat_key"], r["city"])], self.tx[mid])
+        out = self.build(self.sig[mid], res["drift"], res["ladder"], res["vrule"], self.today, info,
+                         self.groups[(r["cat_key"], r["city"])], self.tx[mid])
+        held = self.held_from()
+        part = sorted(self.links.get(mid, {}).get("partners", {}).items(), key=lambda kv: -kv[1])
+        out["links"] = dict(on=bool(self.links), partners=[
+            dict(id=x, name=self.mrow.loc[x, "name"], city=self.mrow.loc[x, "city"], shared=n,
+                 level=int(self.res[x]["ladder"]["level"][self.today]), held_on=self.iso(held[x])) for x, n in part[:6]],
+            more=max(0, len(part) - 6))
+        return out
 
     def reply(self, mid, reason):
         r = self.res[mid]
@@ -308,7 +374,7 @@ class Store:
                        caught=bool(r.caught), days=None if pd.isna(r.days_to_act) else int(r.days_to_act),
                        max_level=int(r.max_level), vol_days=int(r.vol_days))
                   for r in ev[ev.fraud].sort_values(["kind", "days_to_act"]).itertuples()]
-        rules = [dict(name="TrueShape", note="Shape vs own normal, peers and context", caught=self.summary["trueshape"]["caught"],
+        rules = [dict(name="TrueShape", note="Shape vs own normal, peers, context and shared payers", caught=self.summary["trueshape"]["caught"],
                       disrupted=self.summary["trueshape"]["disrupted"])]
         for name, note, fn in [
             ("Sales-limit rule", "Flag when weekly sales reach 2x the shop's normal",
@@ -319,9 +385,25 @@ class Store:
             rules.append(dict(name=name, note=note, caught=int(sum(hit[m] for m in ev[ev.fraud].mid)),
                               disrupted=int(sum(hit[m] for m in ev[~ev.fraud].mid))))
         missed = ev[ev.fraud & ~ev.caught]
-        return dict(summary=self.summary, groups=groups, hard=hard, fronts=fronts, rules=rules,
+        if not hasattr(self, "_stress"):
+            self._stress = E.stress_tests({m: r["drift"] for m, r in self.res.items()}, ev)
+        return dict(summary=self.summary, groups=groups, hard=hard, fronts=fronts, rules=rules, stress=self._stress,
+                    validation=self.validation(),
                     missed=[dict(id=r.mid, name=r.name, category=r.category, city=r.city, max_level=int(r.max_level),
                                  start=self.mrow.loc[r.mid, "change_start_date"]) for r in missed.itertuples()])
+
+    @staticmethod
+    def validation():
+        """Out-of-sample results written by validate.py (None if it has not been run)."""
+        f = Path(__file__).resolve().parent / "validation.json"
+        try:
+            v = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        for r in v.values():
+            r.pop("disrupted_ids", None)
+            r.pop("per_dataset", None)
+        return v
 
     # ------------------------------------------------------------ simulator + upload
     def simulate(self, category, city, scenario, start="mid", seed=None):
@@ -356,9 +438,25 @@ class Store:
         t["timestamp"] = t["timestamp"].dt.strftime("%Y-%m-%d %H:%M")
         return t.to_csv(index=False)
 
+    @staticmethod
+    def _parse_times(s):
+        """Read timestamps in ISO (2026-07-01 07:13) or Indian day-first form (01-07-2026 07:13, 01/07/2026)."""
+        s = s.astype(str).str.strip()
+        iso = s.str.match(r"^\d{4}-\d{1,2}-\d{1,2}")
+        if iso.mean() >= 0.5:
+            return pd.to_datetime(s, errors="coerce", format="ISO8601")
+        return pd.to_datetime(s, errors="coerce", dayfirst=True, format="mixed")
+
     def analyze(self, raw: bytes, filename, category, city):
-        df = pd.read_csv(io.BytesIO(raw))
-        df.columns = [c.strip().lower() for c in df.columns]
+        if raw[:4] in (b"PK\x03\x04", b"%PDF") or b"\x00" in raw[:2048]:
+            raise ValueError("That is not a CSV file. In Excel, use File > Save As > CSV, then upload the .csv file.")
+        try:
+            df = pd.read_csv(io.BytesIO(raw), encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            df = pd.read_csv(io.BytesIO(raw), encoding="latin-1")
+        except pd.errors.ParserError:
+            raise ValueError("Could not read that file as a CSV. Upload a comma-separated file with a header row.")
+        df.columns = [str(c).strip().lower() for c in df.columns]
         if "amount" in df.columns and "amount_inr" not in df.columns:
             df = df.rename(columns={"amount": "amount_inr"})
         if "timestamp" not in df.columns and {"date", "time"} <= set(df.columns):
@@ -366,7 +464,7 @@ class Store:
         need = {"timestamp", "amount_inr", "payer_id"}
         if not need <= set(df.columns):
             raise ValueError("The file needs these columns: timestamp (or date and time), amount_inr (or amount), payer_id. payer_state is optional.")
-        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        df["timestamp"] = self._parse_times(df["timestamp"])
         df["amount_inr"] = pd.to_numeric(df["amount_inr"], errors="coerce")
         df = df.dropna(subset=["timestamp", "amount_inr"])
         if df.empty:

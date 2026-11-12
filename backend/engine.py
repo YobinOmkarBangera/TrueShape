@@ -34,10 +34,11 @@ AMOUNT_LABELS = {
     "mobile": ["<₹200", "₹200", "₹400", "₹700", "₹1k", "₹2k", "₹5k", "₹10k", "₹20k+"],
 }
 
-TRAITS = ["sizes", "hours", "payers", "cashout", "events", "volume"]
+TRAITS = ["sizes", "hours", "payers", "cashout", "events", "volume", "links"]
 TRAIT_LABEL = {"sizes": "Payment sizes", "hours": "Shop hours", "payers": "Who pays",
-               "cashout": "Where the money goes", "events": "What drives sales", "volume": "Sales volume"}
-TRAIT_WEIGHT = {"sizes": .45, "hours": .35, "payers": .45, "cashout": .50, "events": .40, "volume": .25}
+               "cashout": "Where the money goes", "events": "What drives sales", "volume": "Sales volume",
+               "links": "Shared payers"}
+TRAIT_WEIGHT = {"sizes": .45, "hours": .35, "payers": .45, "cashout": .50, "events": .40, "volume": .25, "links": .50}
 SIGNALS = {   # signal -> (habit, drift starts, full drift)
     "mix_shift": ("sizes", .03, .20), "big_shift": ("sizes", .05, .25), "round_shift": ("sizes", .04, .20),
     "night_shift": ("hours", .03, .15),
@@ -45,13 +46,14 @@ SIGNALS = {   # signal -> (habit, drift starts, full drift)
     "cashout_shift": ("cashout", .08, .40),
     "match_lift": ("events", .25, 1.00),
     "volume": ("volume", .50, 1.50),
+    "ring_link": ("links", .03, .15),     # share of new out-of-state payers who also pay a held shop
 }
 
 LEVELS = [
     dict(key="clear", label="All clear", short="Clear", meaning="No action. The shop is not contacted."),
     dict(key="watch", label="Watch", short="Watch", meaning="Monitored quietly. The merchant sees nothing."),
     dict(key="ask", label="Ask: what changed?", short="Asked", meaning="A two-tap check-in in the merchant app. Money flows as normal."),
-    dict(key="delay", label="Delay payouts", short="Delayed", meaning="Settlement moves from next day to 3 days. The shop keeps selling."),
+    dict(key="delay", label="Delay payouts", short="Delayed", meaning="Settlement moves from next day to 3 days, under the risk clause in the merchant agreement. The shop keeps selling."),
     dict(key="hold", label="Hold funds", short="Held", meaning="New payouts held while a risk analyst reviews the case."),
     dict(key="suspend", label="Suspend & report", short="Suspended", meaning="Account suspended. Suspicious transaction report filed with FIU-IND."),
 ]
@@ -180,9 +182,10 @@ def merchant_signals(tx, cash, cal, category, home_state, big_level, baseline_da
         "night_shift": level["night"] - normal["night"], "repeat_drop": normal["repeat"] - level["repeat"],
         "outstate_shift": level["outstate"] - normal["outstate"],
         "cashout_shift": level["cashout"] - normal["cashout"] if has_cash else np.zeros(D),
-        "match_lift": lift, "volume": np.log2(np.maximum(vratio, 1e-6)),
+        "match_lift": lift, "volume": np.log2(np.maximum(vratio, 1e-6)), "ring_link": np.zeros(D),
     }
     return dict(D=D, n=n, vol=vol, level=level, normal=normal, vratio=vratio, x=x, HW=HW, HB=HB, BW=BW, BB=BB,
+                link_on=False, link_count=np.zeros(D), link_share=np.zeros(D),
                 has_cash=has_cash, has_state=has_state, category=category, home=home_state, big_level=big_level)
 
 
@@ -200,12 +203,14 @@ def peer_reference(sigs):
 
 
 def drifts(sig, peer):
+    """Peer group analysis: each signal minus what the typical shop of the group did (Bolton and Hand)."""
     out = {}
     for k, (_, lo, hi) in SIGNALS.items():
         adj = sig["x"][k] - (peer[k] if peer is not None else 0)
         d = np.clip((adj - lo) / (hi - lo), 0, 1)
         d[:WIN - 1] = 0
         out[k] = d
+    out["_link_share"] = sig["x"]["ring_link"]      # raw share, for judging how strong a link is
     return out
 
 
@@ -219,17 +224,19 @@ def trait_scores(dr, day, reply=None, reply_from=None):
     return t
 
 
-def mismatch(t):
+def mismatch(t, two_habits=True):
     """Unexplained habits -> 0-100. Fewer than two shape habits drifting caps it at 39 (Watch)."""
     nd = sum(t[k] >= DRIFT_ON for k in TRAITS if k != "volume")
     r = 1.0
     for k in TRAITS:
         r *= 1 - TRAIT_WEIGHT[k] * t[k]
     s = 100 * (1 - r)
-    return (min(s, 39) if nd <= 1 else s), nd
+    return (min(s, 39) if nd <= 1 and two_habits else s), nd
 
 
-def level_for(s, nd):
+def level_for(s, nd, two_habits=True):
+    if not two_habits:                     # ablation only: score alone decides
+        nd = 3
     lv = 0
     if s >= 25: lv = 1
     if s >= 40 and nd >= 2: lv = 2
@@ -244,10 +251,15 @@ def check_reply(dr, day, reply):
     s_after, nd_after = mismatch(after)
     exp = [TRAIT_LABEL[k] for k in TRAITS if before[k] >= DRIFT_ON and after[k] < DRIFT_ON]
     left = [TRAIT_LABEL[k] for k in TRAITS if after[k] >= DRIFT_ON and k != "volume"]
+    only_links = left == [TRAIT_LABEL["links"]]
+    share = float(dr["_link_share"][day]) if "_link_share" in dr else 0.0
     if not left and not exp:
         verdict, outcome = "Nothing unusual to explain. No action needed.", "clear"
     elif not left:
         verdict, outcome = "The answer explains every change. The shop moves to the trusted lane and this becomes its new normal.", "trusted"
+    elif only_links and share < LINK_STRONG:
+        verdict, outcome = ("The answer explains the changes. A few of its new payers also pay shops on hold, so an analyst "
+                            "checks those payers. Money keeps flowing."), "review"
     else:
         verdict, outcome = "The answer does not explain: " + ", ".join(x.lower() for x in left) + ". The case continues.", "continue"
     return dict(reply=reply, reply_label=REPLIES[reply]["label"], explained=exp, unexplained=left,
@@ -255,50 +267,160 @@ def check_reply(dr, day, reply):
 
 
 # ------------------------------------------------------------------ step 5: decide
-def run_ladder(dr, mid, kind=None):
+def _betting_habit(t, nd):
+    """Strong evidence: money leaves at once, sales follow the cricket schedule, or 3+ habits drift."""
+    return nd >= 3 or t["cashout"] >= DRIFT_ON or t["events"] >= DRIFT_ON
+
+
+FIXES = dict(same_day=True, grace=True, evidence=True, up_one=True, suspend_cash=True,
+             checkin=True, two_habits=True)      # the last two are switched off only for the ablation study
+
+
+def run_ladder(dr, mid, kind=None, answer="scripted", fixes=None):
+    """answer: "scripted" (the merchant's side as simulated), "silent" (never answers),
+    or a REPLIES key (always gives that answer). The last two are used for stress tests."""
+    fx = dict(FIXES, **(fixes or {}))
+    ci, two = fx["checkin"], fx["two_habits"]
     D = len(next(iter(dr.values())))
     reply = reply_from = None
-    if kind in ("front", "disguised_front"):
+    if answer == "silent" or not ci:
+        replies = False
+    elif answer != "scripted":
+        replies = True
+    elif kind in ("front", "disguised_front"):
         replies = front_replies(mid)
     else:
         replies = kind in SCRIPTED_REPLY
     score, level, nds = np.zeros(D), np.zeros(D, int), np.zeros(D, int)
     traits = np.zeros((D, len(TRAITS)))
     events, ask_day, hold_streak, prev, disputed = [], None, 0, 0, False
+
+    def take_reply(d, applies_from):
+        nonlocal reply, reply_from, disputed, ask_day
+        reply, reply_from = (SCRIPTED_REPLY[kind] if answer == "scripted" else answer), applies_from
+        chk = check_reply(dr, d, reply)
+        disputed = chk["outcome"] == "continue"
+        events.append(dict(day=d, type="reply", text=f"Merchant replied: \"{REPLIES[reply]['label']}\""))
+        events.append(dict(day=d, type="check", text=chk["verdict"]))
+        if chk["outcome"] == "clear":                          # nothing to explain yet: the answer is not
+            reply = reply_from = ask_day = None                # banked, so later drift is asked about again
+
     for d in range(D):
+        if fx["same_day"] and ask_day is not None and reply is None and replies and d == ask_day + 1:
+            take_reply(d, d)                                   # an answer counts from the day it arrives
         t = trait_scores(dr, d, reply, reply_from)
         traits[d] = [t[k] for k in TRAITS]
-        s, nd = mismatch(t)
+        s, nd = mismatch(t, two)
         score[d], nds[d] = s, nd
-        lv = level_for(score[max(0, d - 2):d + 1].mean(), nd)
-        if ask_day is not None and reply is None and d - ask_day >= 3:
-            lv = min(lv + 1, 4) if lv >= 2 else 3             # no answer: payouts stay delayed
+        lv = level_for(score[max(0, d - 2):d + 1].mean(), nd, two)
+        if ci and ask_day is not None and reply is None and d - ask_day >= 3:
+            if fx["evidence"] and lv < 2:                      # evidence has faded: back to Watch, unless payouts
+                lv = max(lv, 3 if prev >= 3 else 1)            # were already delayed (that waits for an answer or a person)
+            else:
+                lv = min(lv + 1, 4) if lv >= 2 else 3          # no answer: payouts stay delayed
+                if lv == 4 and level_for(score[max(0, d - 2):d + 1].mean(), nd, two) < 4 and not _betting_habit(t, nd):
+                    lv = 3                                     # silence alone never freezes funds
         if disputed:
-            lv = max(lv, 3)                                    # answer did not fit: analyst review
+            lv = max(lv, 3)                                    # answer did not fit: delayed until a person reviews
+        if lv >= 2 and ask_day is None:
+            ask_day = d
+            events.append(dict(day=d, type="ask", text="Sent the 'What changed?' check-in"))
+            if ci and fx["grace"] and lv >= 3 and t["cashout"] < DRIFT_ON:
+                lv = 2                                         # one day to answer, unless money leaves at once
+        if fx["up_one"] and lv >= 4 and lv > prev + 1:
+            lv = prev + 1                                      # delay before hold, hold before suspend
         hold_streak = hold_streak + 1 if lv >= 4 else 0
-        if hold_streak >= 5 and (t["cashout"] >= DRIFT_ON or t["events"] >= DRIFT_ON):
-            lv = 5
+        if hold_streak >= 5 and (t["cashout"] >= DRIFT_ON or (t["events"] >= DRIFT_ON and not fx.get("suspend_cash"))):
+            lv = 5                                             # suspend only a collection account: money leaves at once
         if prev == 5:
             lv = 5                                             # only a human lifts a suspension
         if prev >= 3 and lv < prev - 1:
             lv = prev - 1                                      # step down one level at a time
         level[d] = lv
-        if lv >= 2 and ask_day is None:
-            ask_day = d
-            events.append(dict(day=d, type="ask", text="Sent the 'What changed?' check-in"))
         if lv != prev:
             events.append(dict(day=d, type="level", level=int(lv), text=f"{LEVELS[prev]['label']} → {LEVELS[lv]['label']}"))
-        if ask_day is not None and reply is None and replies and d == ask_day + 1:
-            reply, reply_from = SCRIPTED_REPLY[kind], d + 1
-            chk = check_reply(dr, d, reply)
-            disputed = chk["outcome"] == "continue"
-            events.append(dict(day=d, type="reply", text=f"Merchant replied: \"{REPLIES[reply]['label']}\""))
-            events.append(dict(day=d, type="check", text=chk["verdict"]))
+        if not fx["same_day"] and ask_day is not None and reply is None and replies and d == ask_day + 1:
+            take_reply(d, d + 1)
         if ask_day is not None and reply is None and d == ask_day + 3:
             events.append(dict(day=d, type="noreply", text="No answer to the check-in after 3 days"))
         prev = lv
     return dict(score=score, level=level, traits=traits, nd=nds, events=events, ask_day=ask_day,
                 reply=reply, reply_from=reply_from)
+
+
+LINK_WIN = 14
+LINK_MIN = 5              # at least 5 shared payers before the share counts
+LINK_STRONG = 0.30        # a link this strong cannot be explained away by an answer
+
+
+def link_signal(tx_by_id, home_by_id, held_from, D, start, baseline_days=BASELINE_DAYS):
+    """Link test. For every shop and day: of the payers who are NEW to it (first seen after its normal weeks)
+    and from OUT OF STATE, active in the last 14 days, what share also paid a shop that was already on Hold or
+    Suspended (and paid it after that shop's change began)? Neighbours sharing local regulars do not count.
+    held_from: {shop: first day it reached Hold}. Returns {shop: (share, count, partners)}: daily arrays, and
+    {held shop: payers shared} over the whole period."""
+    first = {}
+    for m, tx in tx_by_id.items():
+        di = (pd.to_datetime(tx["timestamp"]).dt.normalize() - start).dt.days.values
+        far = tx["payer_state"].fillna(home_by_id[m]).values != home_by_id[m]
+        f = pd.DataFrame({"p": tx["payer_id"].values, "d": di, "far": far})
+        g = f.groupby("p").agg(d0=("d", "min"), far=("far", "max"))
+        new = g[(g.d0 >= baseline_days) & g.far]
+        first[m] = (f[f.p.isin(new.index)], new.d0)
+    # when each payer becomes a known punter of each held shop
+    known = {}
+    for x, hd in held_from.items():
+        _, d0 = first[x]
+        known[x] = np.maximum(d0, hd + 1)          # known from the next nightly run
+    out = {}
+    for y, (f, _) in first.items():
+        share, count = np.zeros(D), np.zeros(D)
+        if len(f):
+            F = None
+            for x, k in known.items():
+                if x == y:
+                    continue
+                kk = k.reindex(f.p.unique())
+                F = kk if F is None else np.fmin(F, kk)
+            pay = f[["p", "d"]].drop_duplicates()
+            codes, uniq = pd.factorize(pay.p)
+            act = np.zeros((len(uniq), D + LINK_WIN + 1), np.int16)
+            np.add.at(act, (codes, pay.d.values), 1)
+            np.add.at(act, (codes, pay.d.values + LINK_WIN), -1)
+            active = np.cumsum(act, axis=1)[:, :D] > 0
+            n_act = active.sum(0)
+            if F is not None:
+                fd = F.reindex(uniq).values
+                linked = active & (np.arange(D)[None, :] >= np.nan_to_num(fd, nan=10 ** 9)[:, None])
+                count = linked.sum(0).astype(float)
+                share = count / np.maximum(n_act, 10)
+        partners = {}
+        if len(f):
+            for x, k in known.items():
+                if x != y:
+                    n = int(np.isfinite(k.reindex(f.p.unique()).values).sum())
+                    if n:
+                        partners[x] = n
+        out[y] = (share, count, partners)
+    return out
+
+
+def stress_tests(drifts_by_id, ev):
+    """Re-run the ladder with the merchant's side made adversarial or unhelpful.
+    fronts_best_excuse: fronts stopped when every front picks whichever answer (or silence) helps it most.
+    honest_silent / honest_other: honest shops whose payouts are touched if they ignore the check-in,
+    or only tap "Something else"."""
+    stopped = 0
+    for r in ev[ev.fraud].itertuples():
+        dr = drifts_by_id[r.mid]
+        options = ["silent"] + CATEGORY_REPLIES[r.category]
+        stopped += min(int(run_ladder(dr, r.mid, r.kind, a)["level"].max()) for a in options) >= 3
+    h = ev[~ev.fraud]
+    hit = lambda a: int(sum(run_ladder(drifts_by_id[m], m, k, a)["level"].max() >= 3 for m, k in zip(h.mid, h.kind)))
+    asked = h[h.asked]
+    return dict(fronts=int(ev.fraud.sum()), fronts_best_excuse=int(stopped), honest=int(len(h)),
+                honest_asked=int(len(asked)), honest_silent=hit("silent"), honest_other=hit("other"),
+                asked_kinds=sorted(set(asked.kind)))
 
 
 def volume_rule(sig):
@@ -344,6 +466,13 @@ def describe(sig, peer, dr, day, traits_today, noun):
         f"{noun.capitalize()} get busier at festivals and weekends. Cricket matches should not matter to them.")
     row("volume", "1.0×", f"{sig['vratio'][day]:.1f}×", f"{float(peer['vratio'][day]):.1f}×" if P else "–",
         "of normal weekly sales", "Shown for context. A shop selling more is not suspicious by itself.")
+    lc, ls = int(sig["link_count"][day]), float(sig["link_share"][day])
+    row("links", "0" if sig["link_on"] else "–", str(lc) if sig["link_on"] else "–", "–",
+        "new out-of-state payers who also pay a shop on hold",
+        (f"{_pct(ls)} of its new out-of-state payers in the last 14 days also paid shops already on hold. "
+         "Neighbours sharing local regulars do not count." if lc else
+         "None of its new out-of-state payers also pay a shop on hold.") if sig["link_on"]
+        else "Needs the whole portfolio of shops, so it is not run for a single shop.")
     return rows
 
 
@@ -352,8 +481,8 @@ def tests(sig, peer, dr, day, reply, noun):
     for k, (tr, lo, hi) in SIGNALS.items():
         own = np.clip((sig["x"][k][day] - lo) / (hi - lo), 0, 1)
         raw.setdefault(tr, []).append((own, dr[k][day]))
-    self_changed = [TRAIT_LABEL[t] for t, v in raw.items() if t != "volume" and max(a for a, _ in v) >= DRIFT_ON]
-    peer_changed = [TRAIT_LABEL[t] for t, v in raw.items() if t != "volume" and max(b for _, b in v) >= DRIFT_ON]
+    self_changed = [TRAIT_LABEL[t] for t, v in raw.items() if t not in ("volume", "links") and max(a for a, _ in v) >= DRIFT_ON]
+    peer_changed = [TRAIT_LABEL[t] for t, v in raw.items() if t not in ("volume", "links") and max(b for _, b in v) >= DRIFT_ON]
     q = {"self": "Has this shop changed compared with its own normal weeks?",
          "peer": f"Are other {noun} in the same city changing the same way this week?",
          "ctx": "Do the changes fit real events and what the merchant told us?"}
@@ -381,6 +510,16 @@ def tests(sig, peer, dr, day, reply, noun):
         out.append(dict(name="Context test", question=q["ctx"], passed=not ev,
                         text=f"Sales jump on cricket match days, which {noun} have no reason for." if ev
                         else "Sales follow festivals and weekends, as they should."))
+    lq = "Do its new payers also pay shops already on hold?"
+    if not sig["link_on"]:
+        out.append(dict(name="Link test", question=lq, passed=None,
+                        text="Needs the whole portfolio of shops, so it is not run for a single shop."))
+    else:
+        lc, on = int(sig["link_count"][day]), dr["ring_link"][day] >= DRIFT_ON
+        out.append(dict(name="Link test", question=lq, passed=not on,
+                        text=(f"{lc} of its new out-of-state payers in the last 14 days also paid shops already on hold."
+                              if on else f"Only {lc} new payers shared with shops on hold: too few to matter." if lc
+                              else "No new payers shared with shops on hold.")))
     return out
 
 

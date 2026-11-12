@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# TrueShape
+# The simulated payments (about 140 MB) are rebuilt on the first run, and GitHub refuses files over 100 MB.
+data/transactions.csv
+# Keep the offline demo, which the Python template above would ignore.
+!dist/

@@ -1,0 +1,1027 @@
+{
+ "main": {
+  "datasets": 20,
+  "seeds": [
+   101,
+   102,
+   103,
+   104,
+   105,
+   106,
+   107,
+   108,
+   109,
+   110,
+   111,
+   112,
+   113,
+   114,
+   115,
+   116,
+   117,
+   118,
+   119,
+   120
+  ],
+  "shops": 3360,
+  "fronts": 360,
+  "honest": 3000,
+  "trueshape": {
+   "stopped": {
+    "k": 359,
+    "n": 360,
+    "pct": 99.7,
+    "ci": [
+     98.4,
+     100.0
+    ]
+   },
+   "bold": {
+    "k": 180,
+    "n": 180,
+    "pct": 100.0,
+    "ci": [
+     97.9,
+     100.0
+    ]
+   },
+   "careful": {
+    "k": 179,
+    "n": 180,
+    "pct": 99.4,
+    "ci": [
+     96.9,
+     99.9
+    ]
+   },
+   "careful_watched": {
+    "k": 180,
+    "n": 180,
+    "pct": 100.0,
+    "ci": [
+     97.9,
+     100.0
+    ]
+   },
+   "disrupted": {
+    "k": 0,
+    "n": 3000,
+    "pct": 0.0,
+    "ci": [
+     0.0,
+     0.1
+    ]
+   },
+   "changed_disrupted": {
+    "k": 0,
+    "n": 920,
+    "pct": 0.0,
+    "ci": [
+     0.0,
+     0.4
+    ]
+   },
+   "asked": 117,
+   "days_bold": {
+    "median": 3.0,
+    "p90": 4.0
+   },
+   "days_careful": {
+    "median": 13.0,
+    "p90": 19.0
+   }
+  },
+  "sales_rule": {
+   "stopped": {
+    "k": 304,
+    "n": 360,
+    "pct": 84.4,
+    "ci": [
+     80.3,
+     87.8
+    ]
+   },
+   "disrupted": {
+    "k": 2065,
+    "n": 3000,
+    "pct": 68.8,
+    "ci": [
+     67.2,
+     70.5
+    ]
+   }
+  },
+  "smart_rule": {
+   "stopped": {
+    "k": 207,
+    "n": 360,
+    "pct": 57.5,
+    "ci": [
+     52.3,
+     62.5
+    ]
+   },
+   "disrupted": {
+    "k": 326,
+    "n": 3000,
+    "pct": 10.9,
+    "ci": [
+     9.8,
+     12.0
+    ]
+   }
+  },
+  "stress": {
+   "best_excuse": {
+    "k": 358,
+    "n": 360,
+    "pct": 99.4,
+    "ci": [
+     98.0,
+     99.8
+    ]
+   },
+   "honest_silent": 111,
+   "honest_asked": 117
+  },
+  "honest_asked": 117,
+  "honest_link_max": 0.411,
+  "ablation": [
+   {
+    "name": "No link test",
+    "stopped": {
+     "k": 350,
+     "n": 360,
+     "pct": 97.2,
+     "ci": [
+      95.0,
+      98.5
+     ]
+    },
+    "disrupted": {
+     "k": 0,
+     "n": 3000,
+     "pct": 0.0,
+     "ci": [
+      0.0,
+      0.1
+     ]
+    },
+    "asked": 117
+   },
+   {
+    "name": "No peer test",
+    "stopped": {
+     "k": 359,
+     "n": 360,
+     "pct": 99.7,
+     "ci": [
+      98.4,
+      100.0
+     ]
+    },
+    "disrupted": {
+     "k": 1,
+     "n": 3000,
+     "pct": 0.0,
+     "ci": [
+      0.0,
+      0.2
+     ]
+    },
+    "asked": 82
+   },
+   {
+    "name": "No check-in",
+    "stopped": {
+     "k": 358,
+     "n": 360,
+     "pct": 99.4,
+     "ci": [
+      98.0,
+      99.8
+     ]
+    },
+    "disrupted": {
+     "k": 99,
+     "n": 3000,
+     "pct": 3.3,
+     "ci": [
+      2.7,
+      4.0
+     ]
+    },
+    "asked": 117
+   },
+   {
+    "name": "No two-habit rule",
+    "stopped": {
+     "k": 360,
+     "n": 360,
+     "pct": 100.0,
+     "ci": [
+      98.9,
+      100.0
+     ]
+    },
+    "disrupted": {
+     "k": 0,
+     "n": 3000,
+     "pct": 0.0,
+     "ci": [
+      0.0,
+      0.1
+     ]
+    },
+    "asked": 253
+   }
+  ],
+  "per_dataset": [
+   {
+    "seed": 101,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 102,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 103,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 104,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 105,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 106,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 107,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 108,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 109,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 110,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 111,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 112,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 113,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 114,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 115,
+    "stopped": 17,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 116,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 117,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 118,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 119,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 120,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   }
+  ],
+  "disrupted_ids": [],
+  "ring_share": 0.5,
+  "stray": 1.0
+ },
+ "ring20": {
+  "datasets": 10,
+  "seeds": [
+   101,
+   102,
+   103,
+   104,
+   105,
+   106,
+   107,
+   108,
+   109,
+   110
+  ],
+  "shops": 1680,
+  "fronts": 180,
+  "honest": 1500,
+  "trueshape": {
+   "stopped": {
+    "k": 180,
+    "n": 180,
+    "pct": 100.0,
+    "ci": [
+     97.9,
+     100.0
+    ]
+   },
+   "bold": {
+    "k": 90,
+    "n": 90,
+    "pct": 100.0,
+    "ci": [
+     95.9,
+     100.0
+    ]
+   },
+   "careful": {
+    "k": 90,
+    "n": 90,
+    "pct": 100.0,
+    "ci": [
+     95.9,
+     100.0
+    ]
+   },
+   "careful_watched": {
+    "k": 90,
+    "n": 90,
+    "pct": 100.0,
+    "ci": [
+     95.9,
+     100.0
+    ]
+   },
+   "disrupted": {
+    "k": 0,
+    "n": 1500,
+    "pct": 0.0,
+    "ci": [
+     0.0,
+     0.3
+    ]
+   },
+   "changed_disrupted": {
+    "k": 0,
+    "n": 460,
+    "pct": 0.0,
+    "ci": [
+     0.0,
+     0.8
+    ]
+   },
+   "asked": 59,
+   "days_bold": {
+    "median": 3.0,
+    "p90": 4.0
+   },
+   "days_careful": {
+    "median": 14.0,
+    "p90": 21.0
+   }
+  },
+  "sales_rule": {
+   "stopped": {
+    "k": 157,
+    "n": 180,
+    "pct": 87.2,
+    "ci": [
+     81.6,
+     91.3
+    ]
+   },
+   "disrupted": {
+    "k": 1030,
+    "n": 1500,
+    "pct": 68.7,
+    "ci": [
+     66.3,
+     71.0
+    ]
+   }
+  },
+  "smart_rule": {
+   "stopped": {
+    "k": 106,
+    "n": 180,
+    "pct": 58.9,
+    "ci": [
+     51.6,
+     65.8
+    ]
+   },
+   "disrupted": {
+    "k": 160,
+    "n": 1500,
+    "pct": 10.7,
+    "ci": [
+     9.2,
+     12.3
+    ]
+   }
+  },
+  "stress": {
+   "best_excuse": {
+    "k": 178,
+    "n": 180,
+    "pct": 98.9,
+    "ci": [
+     96.0,
+     99.7
+    ]
+   },
+   "honest_silent": 55,
+   "honest_asked": 59
+  },
+  "honest_asked": 59,
+  "honest_link_max": 0.371,
+  "ablation": [],
+  "per_dataset": [
+   {
+    "seed": 101,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 102,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 103,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 104,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 105,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 106,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 107,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 108,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 109,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 110,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   }
+  ],
+  "disrupted_ids": [],
+  "ring_share": 0.2,
+  "stray": 1.0
+ },
+ "ring10": {
+  "datasets": 10,
+  "seeds": [
+   101,
+   102,
+   103,
+   104,
+   105,
+   106,
+   107,
+   108,
+   109,
+   110
+  ],
+  "shops": 1680,
+  "fronts": 180,
+  "honest": 1500,
+  "trueshape": {
+   "stopped": {
+    "k": 179,
+    "n": 180,
+    "pct": 99.4,
+    "ci": [
+     96.9,
+     99.9
+    ]
+   },
+   "bold": {
+    "k": 90,
+    "n": 90,
+    "pct": 100.0,
+    "ci": [
+     95.9,
+     100.0
+    ]
+   },
+   "careful": {
+    "k": 89,
+    "n": 90,
+    "pct": 98.9,
+    "ci": [
+     94.0,
+     99.8
+    ]
+   },
+   "careful_watched": {
+    "k": 90,
+    "n": 90,
+    "pct": 100.0,
+    "ci": [
+     95.9,
+     100.0
+    ]
+   },
+   "disrupted": {
+    "k": 0,
+    "n": 1500,
+    "pct": 0.0,
+    "ci": [
+     0.0,
+     0.3
+    ]
+   },
+   "changed_disrupted": {
+    "k": 0,
+    "n": 460,
+    "pct": 0.0,
+    "ci": [
+     0.0,
+     0.8
+    ]
+   },
+   "asked": 59,
+   "days_bold": {
+    "median": 3.0,
+    "p90": 4.0
+   },
+   "days_careful": {
+    "median": 16.0,
+    "p90": 21.200000000000003
+   }
+  },
+  "sales_rule": {
+   "stopped": {
+    "k": 157,
+    "n": 180,
+    "pct": 87.2,
+    "ci": [
+     81.6,
+     91.3
+    ]
+   },
+   "disrupted": {
+    "k": 1030,
+    "n": 1500,
+    "pct": 68.7,
+    "ci": [
+     66.3,
+     71.0
+    ]
+   }
+  },
+  "smart_rule": {
+   "stopped": {
+    "k": 106,
+    "n": 180,
+    "pct": 58.9,
+    "ci": [
+     51.6,
+     65.8
+    ]
+   },
+   "disrupted": {
+    "k": 160,
+    "n": 1500,
+    "pct": 10.7,
+    "ci": [
+     9.2,
+     12.3
+    ]
+   }
+  },
+  "stress": {
+   "best_excuse": {
+    "k": 172,
+    "n": 180,
+    "pct": 95.6,
+    "ci": [
+     91.5,
+     97.7
+    ]
+   },
+   "honest_silent": 55,
+   "honest_asked": 59
+  },
+  "honest_asked": 59,
+  "honest_link_max": 0.288,
+  "ablation": [],
+  "per_dataset": [
+   {
+    "seed": 101,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 102,
+    "stopped": 17,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 103,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 104,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 105,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 106,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 107,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 108,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 109,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 110,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   }
+  ],
+  "disrupted_ids": [],
+  "ring_share": 0.1,
+  "stray": 1.0
+ },
+ "stray4": {
+  "datasets": 10,
+  "seeds": [
+   101,
+   102,
+   103,
+   104,
+   105,
+   106,
+   107,
+   108,
+   109,
+   110
+  ],
+  "shops": 1680,
+  "fronts": 180,
+  "honest": 1500,
+  "trueshape": {
+   "stopped": {
+    "k": 180,
+    "n": 180,
+    "pct": 100.0,
+    "ci": [
+     97.9,
+     100.0
+    ]
+   },
+   "bold": {
+    "k": 90,
+    "n": 90,
+    "pct": 100.0,
+    "ci": [
+     95.9,
+     100.0
+    ]
+   },
+   "careful": {
+    "k": 90,
+    "n": 90,
+    "pct": 100.0,
+    "ci": [
+     95.9,
+     100.0
+    ]
+   },
+   "careful_watched": {
+    "k": 90,
+    "n": 90,
+    "pct": 100.0,
+    "ci": [
+     95.9,
+     100.0
+    ]
+   },
+   "disrupted": {
+    "k": 0,
+    "n": 1500,
+    "pct": 0.0,
+    "ci": [
+     0.0,
+     0.3
+    ]
+   },
+   "changed_disrupted": {
+    "k": 0,
+    "n": 460,
+    "pct": 0.0,
+    "ci": [
+     0.0,
+     0.8
+    ]
+   },
+   "asked": 99,
+   "days_bold": {
+    "median": 3.0,
+    "p90": 4.0
+   },
+   "days_careful": {
+    "median": 13.0,
+    "p90": 18.0
+   }
+  },
+  "sales_rule": {
+   "stopped": {
+    "k": 157,
+    "n": 180,
+    "pct": 87.2,
+    "ci": [
+     81.6,
+     91.3
+    ]
+   },
+   "disrupted": {
+    "k": 1030,
+    "n": 1500,
+    "pct": 68.7,
+    "ci": [
+     66.3,
+     71.0
+    ]
+   }
+  },
+  "smart_rule": {
+   "stopped": {
+    "k": 106,
+    "n": 180,
+    "pct": 58.9,
+    "ci": [
+     51.6,
+     65.8
+    ]
+   },
+   "disrupted": {
+    "k": 160,
+    "n": 1500,
+    "pct": 10.7,
+    "ci": [
+     9.2,
+     12.3
+    ]
+   }
+  },
+  "stress": {
+   "best_excuse": {
+    "k": 179,
+    "n": 180,
+    "pct": 99.4,
+    "ci": [
+     96.9,
+     99.9
+    ]
+   },
+   "honest_silent": 94,
+   "honest_asked": 99
+  },
+  "honest_asked": 99,
+  "honest_link_max": 1.0,
+  "ablation": [],
+  "per_dataset": [
+   {
+    "seed": 101,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 102,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 103,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 104,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 105,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 106,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 107,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 108,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 109,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   },
+   {
+    "seed": 110,
+    "stopped": 18,
+    "fronts": 18,
+    "disrupted": 0,
+    "honest": 150
+   }
+  ],
+  "disrupted_ids": [],
+  "ring_share": 0.5,
+  "stray": 4.0
+ }
+}

@@ -66,7 +66,6 @@ def make_calendar(seed=26):
 
 
 CAL = make_calendar()
-_MATCH, _BIG = CAL["is_match_day"].values, CAL["is_big_match"].values
 
 
 def _norm(a):
@@ -215,16 +214,18 @@ class Bettors:
         return np.array(ids, object), np.array(st, object)
 
 
-def simulate_merchant(mid, category, city, kind, rate, change_day, seed, fest_sens=None):
+def simulate_merchant(mid, category, city, kind, rate, change_day, seed, fest_sens=None, cal=None):
     rng = np.random.default_rng(seed)
+    cal = CAL if cal is None else cal
+    _MATCH, _BIG = cal["is_match_day"].values, cal["is_big_match"].values
     C, home = CATEGORIES[category], CITIES[city]["state"]
     amounts, hours = C["amounts"], C["hours"]
     cd = 10 ** 9 if change_day is None else int(change_day)
     fs = rng.uniform(.7, 1.15) if fest_sens is None else fest_sens
     w = C["fest_w"]
-    fest_series = (1 + (CAL["ganesh_x"].values - 1) * w["ganesh"] * CITIES[city]["ganesh"] * fs
-                   + (CAL["dussehra_x"].values - 1) * w["dussehra"] * fs
-                   + (CAL["diwali_x"].values - 1) * w["diwali"] * fs)
+    fest_series = (1 + (cal["ganesh_x"].values - 1) * w["ganesh"] * CITIES[city]["ganesh"] * fs
+                   + (cal["dussehra_x"].values - 1) * w["dussehra"] * fs
+                   + (cal["diwali_x"].values - 1) * w["diwali"] * fs)
     p_reg = rng.uniform(*C["p_regular"])
     book = Regulars(rng, f"{mid}-", int(rate * 6), home)
     book2 = Regulars(rng, f"{mid}-b", int(rate * 5), home)
@@ -378,6 +379,59 @@ def merchant_list(seed=26):
     return out
 
 
+RING_SHARE = 0.5          # share of a front's punters drawn from its city's betting ring (the rest are its own)
+AREA_SHARE = 0.3          # share of a shop's regulars who also shop at other shops in the same area
+STRAY_BASE = dict(online=0.03, other=0.005)     # punters who also buy genuinely from honest shops
+STRAY_PUNTER = dict(STRAY_BASE)
+
+
+def share_payers(tx, ms, seed=26):
+    """Real people use more than one shop. Relabel payer IDs ONE-TO-ONE inside each shop, so every shop's own
+    pattern is unchanged, while some payers now appear at several shops:
+      - regulars overlap between shops in the same area (neighbours),
+      - the fronts of a city share punters through one betting ring,
+      - a few punters also make genuine purchases at honest shops (most often online sellers)."""
+    rng = np.random.default_rng(seed + 500)
+    pid = tx["payer_id"].astype(str)
+    mid = tx["merchant_id"].values
+    kind = {m["merchant_id"]: m["kind"] for m in ms}
+    info = {m["merchant_id"]: m for m in ms}
+    home = {m["merchant_id"]: CITIES[m["city"]]["state"] for m in ms}
+    uniq = pd.DataFrame({"merchant_id": mid, "payer_id": pid.values, "far": (tx["payer_state"].values !=
+                         np.array([home[x] for x in mid]))}).groupby(["merchant_id", "payer_id"], sort=True)["far"].max().reset_index()
+    role = uniq["payer_id"].str.extract(r"-(b?)([RWB])\d+$")[1].values
+    mapping = {}
+    # neighbours: regulars partly shared inside an area
+    area_of = uniq["merchant_id"].map(lambda m: (info[m]["city"], info[m]["area"])).values
+    reg = uniq[role == "R"].copy()
+    reg["area"] = [a for a, r in zip(area_of, role) if r == "R"]
+    for area, g in reg.groupby("area", sort=True):
+        picks = {m: gg.payer_id.values[rng.random(len(gg)) < AREA_SHARE] for m, gg in g.groupby("merchant_id", sort=True)}
+        pool = max(1, sum(len(v) for v in picks.values()))
+        for m, ids in picks.items():
+            for src, k in zip(ids, rng.choice(pool, len(ids), replace=False)):
+                mapping[(m, src)] = f"AREA|{area[0]}|{area[1]}|{k}"
+    # betting rings: one per city
+    for city in CITIES:
+        fr = [m["merchant_id"] for m in ms if m["city"] == city and m["kind"] in FRAUD]
+        b = {m: uniq.payer_id.values[(uniq.merchant_id.values == m) & (role == "B")] for m in fr}
+        picks = {m: ids[rng.random(len(ids)) < RING_SHARE] for m, ids in b.items()}
+        pool = int(1.3 * max([len(v) for v in picks.values()] + [1]))
+        for m, ids in picks.items():
+            for src, k in zip(ids, rng.choice(pool, len(ids), replace=False)):
+                mapping[(m, src)] = f"RING|{city}|{k}"
+        for m in [x["merchant_id"] for x in ms if x["city"] == city and x["kind"] not in FRAUD]:
+            sel = (uniq.merchant_id.values == m) & (role == "W")
+            p = STRAY_PUNTER["online"] if kind[m] == "online" else STRAY_PUNTER["other"]
+            far = uniq.far.values[sel] if kind[m] == "online" else np.ones(sel.sum(), bool)
+            ids = uniq.payer_id.values[sel][far & (rng.random(sel.sum()) < p)]
+            for src, k in zip(ids, rng.choice(pool, min(len(ids), pool), replace=False)):
+                mapping[(m, src)] = f"RING|{city}|{k}"
+    key = pd.Series(list(zip(mid, pid.values)))
+    tx["payer_id"] = key.map(mapping).fillna(pid.reset_index(drop=True)).values
+    return tx
+
+
 def anonymise_payers(tx, seed=7):
     """Payer IDs in the raw data must not reveal who is a regular or a bettor."""
     codes, uniq = pd.factorize(tx["payer_id"])
@@ -386,25 +440,26 @@ def anonymise_payers(tx, seed=7):
     return tx
 
 
-def generate_dataset(out: Path):
-    out.mkdir(parents=True, exist_ok=True)
-    ms = merchant_list()
-    rng = np.random.default_rng(99)
+def generate_tables(seed=26):
+    """All four tables in memory. seed=26 is the published dataset; any other seed gives an
+    independent replicate: new shops, new payments and a new cricket schedule (festivals stay real)."""
+    off = seed - 26
+    cal = CAL if off == 0 else make_calendar(seed)
+    ms = merchant_list(seed)
+    rng = np.random.default_rng(99 + off)
     txs, cos = [], []
     for j, m in enumerate(ms):
         tx, co = simulate_merchant(m["merchant_id"], m["category"], m["city"], m["kind"], m["rate"],
-                                   m["change_day"], seed=1000 + j, fest_sens=m.get("fest"))
+                                   m["change_day"], seed=1000 + 100_000 * off + j, fest_sens=m.get("fest"), cal=cal)
         txs.append(tx); cos.append(co)
     tx = pd.concat(txs, ignore_index=True)
+    tx = share_payers(tx, ms, seed)
     tx = anonymise_payers(tx)
     tx.insert(0, "txn_id", [f"T{i:08d}" for i in range(1, len(tx) + 1)])
     tx["date"] = tx["timestamp"].dt.date
     tx["time"] = tx["timestamp"].dt.strftime("%H:%M")
     tx = tx[["txn_id", "merchant_id", "date", "time", "timestamp", "amount_inr", "payer_id", "payer_state",
              "payment_mode", "answer_key_source"]]
-    tx.to_csv(out / "transactions.csv", index=False)
-    pd.concat(cos, ignore_index=True).to_csv(out / "cashouts.csv", index=False)
-    CAL.to_csv(out / "calendar.csv", index=False)
     rows = []
     for m in ms:
         C = CATEGORIES[m["category"]]
@@ -417,7 +472,15 @@ def generate_dataset(out: Path):
             answer_key=m["kind"], answer_key_label=KINDS[m["kind"]],
             change_start_date=str(DAYS[m["change_day"]].date()) if m["change_day"] is not None else "",
             story_note=m["note"]))
-    md = pd.DataFrame(rows)
+    return pd.DataFrame(rows), tx, pd.concat(cos, ignore_index=True), cal
+
+
+def generate_dataset(out: Path):
+    out.mkdir(parents=True, exist_ok=True)
+    md, tx, co, cal = generate_tables()
+    tx.to_csv(out / "transactions.csv", index=False)
+    co.to_csv(out / "cashouts.csv", index=False)
+    cal.to_csv(out / "calendar.csv", index=False)
     md.to_csv(out / "merchants.csv", index=False)
     return md, tx
 

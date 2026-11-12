@@ -92,14 +92,14 @@ function radar(R, color, opts = {}) {
 }
 const fmtAxis = (a, v) => a.fmt === "x" ? `${v.value.toFixed(1)}×` : pct(v.value);
 
-function gauge(score, level) {
+function gauge(score, level, note) {
   const r = 52, C = 2 * Math.PI * r, f = Math.max(0.01, score / 100);
   return `<div class="gauge">${svg("0 0 128 128", `
     <circle cx="64" cy="64" r="${r}" fill="none" stroke="var(--sunk)" stroke-width="11"/>
     <circle cx="64" cy="64" r="${r}" fill="none" stroke="${lc(level)}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 64 64)"/>
     <text x="64" y="71" text-anchor="middle" font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="32" font-weight="700" fill="var(--ink)">${score}</text>
     <text x="64" y="89" text-anchor="middle" font-size="11" fill="var(--muted)">out of 100</text>`, "", `Mismatch score ${score} out of 100`)}
-    <span class="kicker">Mismatch score</span></div>`;
+    <span class="kicker">Mismatch score</span>${note ? `<span class="small muted" style="display:block;text-align:center;max-width:150px">${esc(note)}</span>` : ""}</div>`;
 }
 
 function bars(normal, now, labels, title) {
@@ -215,15 +215,22 @@ function testsBlock(p) {
     const lab = t.passed === null ? "No data" : t.passed ? "Passes" : "Flags";
     return `<div class="test" style="--tc:${c}"><div class="top"><h4>${esc(t.name)}</h4><span class="chip ${t.passed === null ? "" : t.passed ? "ok" : "bad"}">${lab}</span></div><div class="q">${esc(t.question)}</div><p>${esc(t.text)}</p></div>`;
   };
-  return `<section class="card"><h2>Three tests</h2><p class="sub">A shop moves up the ladder only when its own history, its peers and the context all point the same way.</p>
+  return `<section class="card"><h2>Four tests</h2><p class="sub">A shop moves up the ladder only when several independent signs agree: its own history, its peers, the context, and the payers it shares with shops already on hold.</p>
     <div class="tests">${p.tests.map(card).join("")}</div></section>`;
+}
+function linksBlock(p) {
+  if (!p.links || !p.links.on || !p.links.partners.length) return "";
+  const rows = p.links.partners.map(x => `<tr><td><a href="#case-${esc(x.id)}">${esc(x.name)}</a> <span class="muted small">${esc(x.id)}, ${esc(x.city)}</span></td><td class="r">${x.shared}</td><td>${pill(x.level)}</td><td>${fmtD(x.held_on)}</td></tr>`).join("");
+  return `<section class="card"><h2>Shared payers</h2><p class="sub">Shops already on hold that this shop's new out-of-state payers also paid. Betting rings collect through several shops at once; only a payment provider can see all of them together.</p>
+    <div class="scroll" style="margin-top:12px"><table class="gtable"><thead><tr><th>Shop on hold</th><th class="r">Payers shared</th><th>Status today</th><th>On hold from</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${p.links.more ? `<p class="small muted" style="margin-top:8px">And ${p.links.more} more shops on hold.</p>` : ""}</section>`;
 }
 function traitsBlock(p) {
   const verdict = s => ({ unusual: `<span class="chip bad">Unusual</span>`, explained: `<span class="chip warn">Changed, explained</span>`,
     normal: `<span class="chip ok">Normal</span>`, grew: `<span class="chip info">Grew, not a concern alone</span>` }[s]);
   const rows = p.traits.map(t => `<tr><td><div class="tl">${esc(t.label)}</div><div class="ts">${esc(t.sentence)}</div></td>
     <td class="v">${esc(t.normal)}</td><td class="v">${esc(t.now)}</td><td class="v">${esc(t.peers)}</td><td>${verdict(t.status)}<div class="unit">${esc(t.unit)}</div></td></tr>`).join("");
-  return `<section class="card"><h2>Fingerprint check</h2><p class="sub">The six habits behind the shape. Peers means the typical ${esc(p.noun.replace(/ies$/, "y").replace(/s$/, ""))} in ${esc(p.city)} over the same 7 days.</p>
+  return `<section class="card"><h2>Fingerprint check</h2><p class="sub">The six habits behind the shape, plus payers shared with shops on hold. Peers means the typical ${esc(p.noun.replace(/ies$/, "y").replace(/s$/, ""))} in ${esc(p.city)} over the same 7 days.</p>
     <div class="scroll" style="margin-top:12px"><table class="ttable"><thead><tr><th>Habit</th><th>Normal</th><th>Now</th><th>Peers</th><th>Verdict</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 function evidenceBlock(p) {
@@ -267,7 +274,7 @@ function phone(p) {
     <div class="opts"><span class="lbl">${ck ? "Try a different answer" : "What changed?"}</span>${opts}</div></div></div>`;
 }
 function resultMsg(c) {
-  const color = c.outcome === "continue" ? "var(--bad)" : "var(--good)";
+  const color = c.outcome === "continue" ? "var(--bad)" : c.outcome === "review" ? "var(--warn, #b7791f)" : "var(--good)";
   return `<div class="msg res ${reduced() ? "" : "pop"}" style="--rc:${color}">${esc(c.verdict)}${c.explained.length ? `<br><b>Explained:</b> ${esc(c.explained.join(", "))}` : ""}${c.unexplained.length ? `<br><b>Not explained:</b> ${esc(c.unexplained.join(", "))}` : ""}${c.level_label ? `<br><b>Next step:</b> ${esc(c.level_label)}` : ""}<small>Checked automatically against the payment pattern</small></div>`;
 }
 function wirePhone(p) {
@@ -292,7 +299,7 @@ function caseBody(p, opts = {}) {
       <div class="state">${pill(p.level, true)}<span class="meaning">${esc(META.levels[p.level].meaning)}</span></div>
       ${p.answer && !opts.noKey ? `<div class="reveal"><button class="btn" id="reveal" type="button">Reveal what this shop really is</button><div class="answer" id="answer" hidden><b>Answer key:</b> ${esc(p.answer.label)}${p.answer.change_date ? `, from ${fmtD(p.answer.change_date)}` : ""}. ${esc(p.answer.note)}</div></div>` : ""}
     </div>
-    ${gauge(p.score, p.level)}
+    ${gauge(p.score, p.level, p.focus_day !== p.today ? `on ${fmtD(p.focus_day)}, when it was escalated (today ${p.score_today})` : "")}
   </section>
   ${shapeBlock(p)}
   ${declaredBlock(p)}
@@ -301,6 +308,7 @@ function caseBody(p, opts = {}) {
     <div class="ckey"><span><i style="background:var(--accent)"></i>This shop's sales</span>${p.peer_vol_series ? `<span><i style="background:var(--typical)"></i>Typical ${esc(p.noun.replace(/ies$/, "y").replace(/s$/, ""))} in ${esc(p.city)}</span>` : ""}<span><i style="background:var(--bad);height:2px"></i>Sales-limit rule (2×)</span><span><i style="background:var(--festival);height:10px;outline:1px solid var(--warn)"></i>Festival</span><span><i style="background:var(--l2);width:10px;height:10px;border-radius:50%"></i>Check-in sent</span></div>
   </section>
   ${testsBlock(p)}
+  ${linksBlock(p)}
   ${traitsBlock(p)}
   ${evidenceBlock(p)}
   <section class="card"><div class="act">
@@ -553,6 +561,12 @@ function pageTry(root) {
 }
 
 // ------------------------------------------------------------------ page: results
+const ABLATION_NOTE = {
+  "No link test": "Careful fronts that keep every habit small are found through the punters they share with fronts already on hold.",
+  "No peer test": "One honest shop gets disrupted. The peer test also asks more merchants, because it notices shops whose customers stop coming back the way their neighbours' do; one answer clears them.",
+  "No check-in": "Without asking first, honest shops with real changes get their payouts delayed.",
+  "No two-habit rule": "A single odd sign would trigger the check-in, so about twice as many honest merchants are bothered.",
+};
 async function pageResults(root) {
   RESULTS = RESULTS || await api.get("/api/results");
   const R = RESULTS, s = R.summary, t = s.trueshape;
@@ -567,11 +581,34 @@ async function pageResults(root) {
   const groups = R.groups.map(g => `<tr><td>${esc(g.city)}</td><td>${catTag(g.category)}</td><td class="r">${g.shops}</td><td class="r">${g.caught} of ${g.fronts}</td><td class="r">${g.disrupted}</td><td class="r">${g.asked}</td><td class="r">${g.vol_disrupted}</td></tr>`).join("");
   const hard = R.hard.map(h => `<tr><td><a href="#case-${h.example}">${esc(h.label.replace("Honest: ", "").replace(/^./, c => c.toUpperCase()))}</a></td><td class="r">${h.shops}</td><td class="r">${h.left_alone}</td><td class="r">${h.asked_cleared}</td><td class="r">${h.disrupted}</td><td class="r">${h.vol_hit}</td></tr>`).join("");
   const fronts = R.fronts.slice().sort((a, b) => (a.kind === "front" ? 0 : 1) - (b.kind === "front" ? 0 : 1) || (a.days ?? 99) - (b.days ?? 99)).map(f => `<tr><td><a href="#case-${f.id}">${esc(f.name)}</a></td><td>${catTag(f.category)}</td><td>${esc(f.city)}</td><td>${f.kind === "front" ? "Bold" : "Careful"}</td><td>${f.caught ? pill(Math.max(3, f.max_level)) : pill(f.max_level)}</td><td class="r">${f.days === null ? "–" : f.days + " days"}</td><td class="r">${f.vol_days}</td></tr>`).join("");
+  const V = R.validation && R.validation.main, VS = R.validation || {};
+  const ci = r => `${r.pct}% <span class="muted small">(95% range ${r.ci[0]} to ${r.ci[1]}%)</span>`;
+  const valid = V ? `<section class="card"><h2>Tested on ${V.datasets} new datasets it had never seen</h2>
+    <p class="sub">The numbers above come from one dataset of ${s.shops} shops, the one the thresholds were set on. To check that TrueShape is not tuned to it, we built ${V.datasets} new datasets with new shops, new payments and a new cricket schedule (${V.shops.toLocaleString("en-IN")} shops, ${V.fronts} fronts) and ran the same engine, unchanged.</p>
+    <div class="scroll" style="margin-top:12px"><table class="gtable"><thead><tr><th>Method</th><th>Fronts stopped (of ${V.fronts})</th><th>Honest shops disrupted (of ${V.honest.toLocaleString("en-IN")})</th></tr></thead><tbody>
+      <tr><td><b>TrueShape</b></td><td>${V.trueshape.stopped.k}: ${ci(V.trueshape.stopped)}</td><td>${V.trueshape.disrupted.k}: ${ci(V.trueshape.disrupted)}</td></tr>
+      <tr><td>Sales-limit rule (2x own normal)</td><td>${V.sales_rule.stopped.k}: ${V.sales_rule.stopped.pct}%</td><td>${V.sales_rule.disrupted.k.toLocaleString("en-IN")}: ${V.sales_rule.disrupted.pct}%</td></tr>
+      <tr><td>Smarter sales rule (2x the group)</td><td>${V.smart_rule.stopped.k}: ${V.smart_rule.stopped.pct}%</td><td>${V.smart_rule.disrupted.k.toLocaleString("en-IN")}: ${V.smart_rule.disrupted.pct}%</td></tr>
+    </tbody></table></div>
+    <p class="small muted" style="margin-top:10px">Bold fronts: ${V.trueshape.bold.pct}% stopped, median ${V.trueshape.days_bold.median} days after the first bet. Careful fronts: ${V.trueshape.careful.pct}% stopped, median ${V.trueshape.days_careful.median} days; ${V.trueshape.careful_watched.pct}% were at least on Watch. When every front gives its best excuse or stays silent, ${V.stress.best_excuse.pct}% are still stopped. The 95% range is a Wilson interval.</p></section>` : "";
+  const abl = V && V.ablation && V.ablation.length ? `<section class="card"><h2>What each part adds</h2>
+    <p class="sub">The same ${V.datasets} new datasets, with one part of TrueShape switched off at a time. Asking an honest merchant is a small cost too, so it is counted.</p>
+    <div class="scroll" style="margin-top:12px"><table class="gtable"><thead><tr><th>Version</th><th class="r">Fronts stopped</th><th class="r">Honest shops disrupted</th><th class="r">Honest shops asked</th><th>What it shows</th></tr></thead><tbody>
+      <tr><td><b>Full TrueShape</b></td><td class="r">${V.trueshape.stopped.pct}%</td><td class="r">${V.trueshape.disrupted.k}</td><td class="r">${V.honest_asked}</td><td></td></tr>
+      ${V.ablation.map(a => `<tr><td>${esc(a.name)}</td><td class="r">${a.stopped.pct}%</td><td class="r">${a.disrupted.k}</td><td class="r">${a.asked}</td><td class="small">${esc(ABLATION_NOTE[a.name] || "")}</td></tr>`).join("")}
+    </tbody></table></div></section>` : "";
+  const sensRows = [["ring20", "Rings share 2 in 10 punters"], ["ring10", "Rings share 1 in 10 punters"], ["stray4", "4 times more punters also buy at honest shops"]]
+    .filter(([k]) => VS[k]).map(([k, lab]) => `<tr><td>${lab}</td><td class="r">${VS[k].trueshape.stopped.pct}%</td><td class="r">${VS[k].trueshape.disrupted.k} of ${VS[k].honest.toLocaleString("en-IN")}</td><td class="r">${VS[k].datasets}</td></tr>`).join("");
+  const sens = sensRows ? `<section class="card"><h2>If our assumptions about rings are wrong</h2><p class="sub">The link test relies on fronts sharing punters. In the main test half of each front's punters come from its ring. Here the rings are much weaker, or honest shops see far more punters as ordinary customers.</p>
+    <div class="scroll" style="margin-top:12px"><table class="gtable"><thead><tr><th>Scenario</th><th class="r">Fronts stopped</th><th class="r">Honest shops disrupted</th><th class="r">New datasets</th></tr></thead><tbody>${sensRows}</tbody></table></div></section>` : "";
   root.innerHTML = `
   <section class="card"><h1 class="headline">${t.caught} of ${s.fronts} betting fronts stopped. ${t.disrupted} of ${s.honest} honest shops disrupted.</h1>
     <p class="sub" style="margin-top:10px">Tested on ${s.shops} simulated shops over 126 days, with an answer key the engine never sees. Bold fronts had their payouts delayed ${span(bold)} days after their first bet; careful ones took ${span(careful)} days. ${t.asked_only} honest shops with genuinely unusual changes were asked one question and cleared.</p></section>
   <section class="card"><h2>Against simpler rules</h2><p class="sub">Two common ways to watch merchants, run on the same shops. The plain sales rule also flags every festival rush; the smarter one compares with the group but misses careful fronts.</p>
     <div class="rules">${ruleRows}</div></section>
+  ${valid}
+  ${abl}
+  ${sens}
   <section class="card"><h2>By city and category</h2><p class="sub">It works the same way in every group, without any category-specific rules.</p>
     <div class="scroll" style="margin-top:12px"><table class="gtable"><thead><tr><th>City</th><th>Category</th><th class="r">Shops</th><th class="r">Fronts stopped</th><th class="r">Honest disrupted</th><th class="r">Asked once, cleared</th><th class="r">Sales rule: honest hit</th></tr></thead><tbody>${groups}</tbody></table></div></section>
   <section class="card"><h2>The hardest honest shops</h2><p class="sub">Shops whose business really changed, built to look suspicious. Click a type to open an example.</p>
@@ -580,7 +617,10 @@ async function pageResults(root) {
     <div class="scroll" style="margin-top:12px"><table class="gtable"><thead><tr><th>Shop</th><th>Category</th><th>City</th><th>Type</th><th>Highest step</th><th class="r">Days to act</th><th class="r">Sales rule days</th></tr></thead><tbody>${fronts}</tbody></table></div></section>
   <section class="card"><h2>Limits</h2>
     <ul class="limits">
-      <li>${R.missed.length} careful fronts were not stopped. All of them started late (${R.missed.map(m => fmtD(m.start)).join(", ")}) and stayed small after the cricket season ended. They sit on Watch, so they are monitored, not missed entirely.</li>
+      ${R.missed.length ? `<li>${R.missed.length} careful ${R.missed.length === 1 ? "front was" : "fronts were"} not stopped (started ${R.missed.map(m => fmtD(m.start)).join(", ")}). ${R.missed.every(m => m.max_level >= 1) ? "They sit on Watch, so they are monitored, not missed entirely." : ""}</li>` : `<li>Every front in this dataset was stopped, but careful fronts that work alone, without sharing punters with other fronts, rely on the first four tests and can take three weeks or more.</li>`}
+      <li>The link test assumes a betting ring collects through several shops and that some punters pay more than one of them. In our data half of each front's punters come from its ring; it still works when only one in ten do (see the out-of-sample test above).</li>
+      ${R.stress ? `<li>Stress test, fronts: when every front gives whichever answer helps it most, or stays silent, ${R.stress.fronts_best_excuse} of ${R.stress.fronts} are still stopped.</li>
+      <li>Stress test, honest shops: the ${R.stress.honest_asked} honest shops that get asked are cleared by their answer. If they ignored the check-in, ${R.stress.honest_silent} would have payouts delayed; tapping only "Something else" gives the same (${R.stress.honest_other}). None would be suspended, and silence alone never freezes funds unless money leaves at once or sales follow cricket matches. So the check-in also goes by SMS and WhatsApp with a reminder call before any delay, and the delay lifts the day they answer.</li>` : ""}
       <li>Careful fronts take two to three weeks to surface. Linking shops that share the same payers would catch networks sooner.</li>
       <li>The data is simulated. The thresholds (25, 40, 55, 70) would be tuned on real data by running TrueShape silently next to existing checks first.</li>
       <li>Payer location is not always known for in-store UPI. Without it, Who pays relies on returning customers, which is always known.</li>
@@ -592,13 +632,14 @@ function pageHow(root) {
   root.innerHTML = `
   <section class="card"><h1 class="headline">Every business has a shape. Fraud changes it.</h1>
     <p class="sub" style="margin-top:10px">A betting front can register with genuine documents, and each ₹500 payment looks harmless. What it cannot hide is that, taken together, its payments stop looking like the business it registered as: wrong amounts, wrong hours, wrong customers, money leaving too fast, and sales that follow cricket instead of festivals.</p></section>
-  <section class="card"><h2>Five steps, every day, for every shop</h2>
+  <section class="card"><h2>Six checks, every night, for every shop</h2>
     <div class="pipe">
-      <div class="pstep"><span class="ix">1</span><h4>Collect</h4><p>Payments, payers and settlements the payment provider already records. Nothing new is asked of the merchant.</p></div>
-      <div class="pstep"><span class="ix">2</span><h4>Fingerprint</h4><p>Summarise the last 7 days as six habits: payment sizes, shop hours, who pays, where the money goes, what drives sales, and volume.</p></div>
-      <div class="pstep"><span class="ix">3</span><h4>Three tests</h4><p>Self: against its own first 45 days. Peers: against the same category in the same city that week. Context: against the calendar and the merchant's answer.</p></div>
-      <div class="pstep"><span class="ix">4</span><h4>Score</h4><p>Unexplained changes become a 0 to 100 mismatch score. With fewer than two odd habits, a shop can never go past Watch.</p></div>
-      <div class="pstep"><span class="ix">5</span><h4>Respond</h4><p>Watch, ask, delay, hold, suspend and report. A fitting answer moves the shop to the trusted lane.</p></div>
+      <div class="pstep"><span class="ix">1</span><h4>Fingerprint</h4><p>The last 7 days of payments become six habits: payment sizes, shop hours, who pays, where the money goes, what drives sales, and volume.</p></div>
+      <div class="pstep"><span class="ix">2</span><h4>Self test</h4><p>Compare with the shop's own first 45 days.</p></div>
+      <div class="pstep"><span class="ix">3</span><h4>Peer test</h4><p>Subtract what the typical shop of the same category in the same city did that week, so festival rushes cancel out.</p></div>
+      <div class="pstep"><span class="ix">4</span><h4>Context test</h4><p>Check the cricket calendar and the merchant's answer to "What changed?".</p></div>
+      <div class="pstep"><span class="ix">5</span><h4>Link test</h4><p>Do its new out-of-state payers also pay shops already on hold? Catch one front, find the ring.</p></div>
+      <div class="pstep"><span class="ix">6</span><h4>Score and respond</h4><p>Unexplained signs become a 0 to 100 score. Fewer than two keep a shop at Watch. Then ask, delay, hold, suspend and report.</p></div>
     </div></section>
   <section class="card"><h2>What data it uses</h2><p class="sub">All of it is already held by a payment aggregator. The prototype uses simulated data with the same columns.</p>
     <div class="scroll" style="margin-top:12px"><table class="dtable"><thead><tr><th>Data</th><th>Where it comes from</th><th>What it reveals</th></tr></thead><tbody>
@@ -615,15 +656,28 @@ function pageHow(root) {
       <li><b>Volume is never enough</b>Selling more is shown, but cannot move a shop past Watch on its own.</li>
       <li><b>Two habits must agree</b>One odd habit keeps a shop at Watch. Money is touched only when several drift together.</li>
       <li><b>Compare with the right herd</b>A Mumbai kirana is compared with Mumbai kiranas. If they all spike at Ganesh Chaturthi, nobody is flagged.</li>
-      <li><b>Ask before acting</b>A 10-second check-in comes before any delay. A fitting answer clears the shop and becomes its new normal.</li>
+      <li><b>Ask before acting</b>A 10-second check-in goes out at the first sign of trouble, and the shop gets a day to answer before any delay, unless money leaves the moment it arrives. A fitting answer clears the shop and becomes its new normal.</li>
+      <li><b>Silence is not proof</b>No answer can delay payouts, but never freezes funds unless money leaves at once, sales follow cricket matches, or three habits drift together. Only money that leaves at once can lead to a suspension.</li>
+      <li><b>A few shared payers are not a ring</b>Many punters shared with shops on hold count as evidence. A handful are checked by an analyst while the money keeps flowing.</li>
       <li><b>Step by step</b>Delay before hold, hold before suspend. Levels come down one step at a time.</li>
-      <li><b>People decide the big steps</b>Holds and suspensions go to an analyst with the evidence already written up.</li>
+      <li><b>People decide the big steps</b>The engine recommends holds and suspensions with the evidence written up; an analyst confirms them, and only a person can lift a suspension.</li>
     </ul></section>
+  <section class="card"><h2>Built on research and on the rules</h2><p class="sub">Each part of TrueShape follows published work or a specific RBI requirement.</p>
+    <div class="scroll" style="margin-top:12px"><table class="dtable"><thead><tr><th>TrueShape part</th><th>Source</th><th>What it says</th></tr></thead><tbody>
+      <tr><td>Self test and peer test</td><td>Bolton and Hand (2001), <i>Unsupervised profiling methods for fraud detection</i>; Weston et al. (2008), <i>Plastic card fraud detection using peer group analysis</i></td><td>Flag accounts that drift from their own past (break point analysis) and from accounts that used to behave like them (peer group analysis), without fraud labels.</td></tr>
+      <tr><td>Peers chosen by declared business</td><td>Our design choice</td><td>Peers are picked by the business the shop declared, not by behaviour: the question is whether it still acts like that business. Behaviour-based peers would let a front find other fronts as its peers.</td></tr>
+      <tr><td>Plain reasons, few false alarms</td><td>Oztas et al. (2024), <i>Transaction monitoring in anti-money laundering: a qualitative analysis and points of view from industry</i></td><td>Practitioners report that rule-based monitoring raises too many false alarms, and that explainability is a requirement.</td></tr>
+      <tr><td>Link test</td><td>Fronzetti Colladon and Remondi (2017), <i>Using social network analysis to prevent money laundering</i>; Cheng et al. (2023), <i>Anti-money laundering by group-aware deep graph learning</i></td><td>Laundering is organised: accounts linked through shared counterparties reveal groups that single-account checks miss.</td></tr>
+      <tr><td>Simulated test data</td><td>Altman et al. (2023), <i>Realistic synthetic financial transactions for anti-money laundering models</i></td><td>Real laundering labels are incomplete, so simulated data with a complete answer key is a fair way to compare methods.</td></tr>
+      <tr><td>Watching declared vs actual business</td><td>RBI Master Direction on Payment Aggregators, 15 Sep 2025, para 13(h) and 13(e)</td><td>The PA must monitor the transactions merchants carry out after onboarding, and allot each merchant the appropriate category code.</td></tr>
+      <tr><td>Delay payouts</td><td>Same Direction, para 16</td><td>Settlement timelines are set in the merchant agreement, which must state them transparently. TrueShape's delay is a risk-based clause in that agreement.</td></tr>
+      <tr><td>Suspend and report</td><td>Prevention of Money Laundering Act, 2002; same Direction, para 13(i)</td><td>Non-bank PAs register with FIU-IND and report suspicious transactions.</td></tr>
+    </tbody></table></div></section>
   <section class="card"><h2>How it is built</h2><p class="sub">A transparent comparison engine: plain statistics and stated rules, no machine learning and no fraud labels needed. Every decision comes with a sentence that explains it.</p>
     <div class="arch">
       <div><b>Screens</b>This app: HTML, CSS and JavaScript, with hand-drawn SVG charts.</div>
       <div><b>API</b>Python FastAPI: overview, case files, merchant replies, results, live simulation, file upload.</div>
-      <div><b>Engine</b>Python, pandas and NumPy: fingerprint, three tests, score and response ladder.</div>
+      <div><b>Engine</b>Python, pandas and NumPy: fingerprint, four tests, score and response ladder.</div>
       <div><b>Data</b>Simulated: 168 shops, about 16.6 lakh payments over 126 days. In production: the provider's transaction stream.</div>
     </div></section>`;
 }

@@ -192,7 +192,7 @@ select { border: 1px solid var(--line); background: var(--surface); border-radiu
 .ckey span { display: inline-flex; align-items: center; gap: 6px }
 .ckey i { display: inline-block; width: 16px; height: 3px; border-radius: 2px }
 
-.tests { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px }
+.tests { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 14px }
 .test { border-radius: 12px; padding: 14px; background: var(--sunk); display: grid; gap: 8px; align-content: start; border-top: 3px solid var(--tc) }
 .test .top { display: flex; gap: 8px; align-items: center; justify-content: space-between }
 .test h4 { font-size: 15px }
@@ -308,7 +308,7 @@ footer.note { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(saf
   .act { grid-template-columns: minmax(0, 1fr) }
   .pipe { grid-template-columns: repeat(2, minmax(0, 1fr)) }
   .pstep::after { display: none }
-  .arch, .grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .arch, .grid3, .tests { grid-template-columns: repeat(2, minmax(0, 1fr)) }
 }
 @media (max-width: 760px) {
   .grid2, .grid3, .compare, .tests, .guard, .declared, .shape, .pipe, .arch { grid-template-columns: minmax(0, 1fr) }
